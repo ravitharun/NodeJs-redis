@@ -1,5 +1,5 @@
 // index.js
-import express from "express";
+import express, { json } from "express";
 import { createClient } from "redis";
 
 const app = express();
@@ -19,15 +19,51 @@ app.get("/", async (req, res) => {
 
 // Set a value
 app.get("/set", async (req, res) => {
-  await redisClient.set("name", "Tharun");
-  res.send("Value set in Redis");
+  const dataapi = await fetch('https://jsonplaceholder.typicode.com/posts');
+  const data = await dataapi.json()
+  await redisClient.set("posts", JSON.stringify(data), { EX: 3600 });
+  res.send(data);
 });
-
+// https://www.youtube.com/watch?v=Vx2zPMPvmug&t=4530s
 // Get a value
 app.get("/get", async (req, res) => {
-  const value = await redisClient.get("name");
-  res.send(`Value from Redis: ${value}`);
+  const value = await redisClient.get("posts");
+  const parsedValue = JSON.parse(value);
+  res.send(parsedValue[1]);
 });
+
+// Update a value
+app.get("/updatename", async (req, res) => {
+  const NameUpdated = await redisClient.append("name", " Reddy");
+  // console.log(NameUpdated,'NameUpdated')
+  res.send("Value updated from Redis", NameUpdated);
+});
+
+app.get("/lpush", async (req, res) => {
+  try {
+    const res1 = await redisClient.lPush('mylist', 'world');
+    console.log(res1); // 1    await redisClient.lpush("mylist", "value2");
+    // const res2 = await redisClient.lPush('mylist', 'world');
+    // console.log(res2); // 
+    res.send("Values pushed to Redis list", res1);
+  } catch (error) {
+    console.log(error.message)
+  }
+});
+
+
+// Get list values
+app.get("/lrange", async (req, res) => {
+  try {
+    const listValues = await redisClient.lRange("mylist", 0, -1);
+    console.log(listValues, 'listValues')
+    res.send(`List values from Redis: ${listValues}`);
+  } catch (error) {
+    console.log(error.message)
+  }
+}
+);
+
 
 // Start server
 app.listen(3000, () => console.log("Server running on port 3000"));
