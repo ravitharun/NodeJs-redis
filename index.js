@@ -64,6 +64,50 @@ app.get("/lrange", async (req, res) => {
 }
 );
 
+app.get("/addset", (req, res) => {
+  try {
+    redisClient.sAdd('myset', 'value1');
+    redisClient.sAdd('myset', 'value2');
+    redisClient.sAdd('myset', 'value3');
+    res.send("Values added to Redis set");
+  } catch (error) {
+    console.log(error.message)
+  }
+});
+
+app.get("/deleteset", async (req, res) => {
+  try {
+    const deletedCount = await redisClient.del('myset');  
+    console.log(deletedCount,'deletedCount')
+   
+    res.send(`Deleted ${deletedCount} set(s) from Redis`);
+  } catch (error) {
+    console.log(error.message)
+  }
+});
+
+app.get("/getset", async (req, res) => {
+  try {
+    const setValues = await redisClient.sMembers('myset');  
+    console.log(setValues,'setValues')
+    res.send(`Set values from Redis: ${setValues}`);
+  } catch (error) {
+    console.log(error.message)
+  }
+});
+
+app.get(`/getsetismember/:qrueryValue`, async (req, res) => {
+  try {
+    const qrueryValue = req.params.qrueryValue;
+    console.log(qrueryValue,';qrueryValue')
+    const setValues = await redisClient.sIsMember('myset',qrueryValue);  
+     const setValuess = await redisClient.sMembers('myset');  
+    console.log(setValuess,'setValuess')
+    res.send(`Set values from Redis: ${setValues}`);
+  } catch (error) {
+    console.log(error.message)
+  }
+});
 
 // Start server
 app.listen(3000, () => console.log("Server running on port 3000"));
