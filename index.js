@@ -23,13 +23,24 @@ const limiter = rateLimit({
     sendCommand: (...args) => redisClient.call(...args),
   }),
   windowMs: 5 * 60 * 1000, // 15 minutes 300000 ms
-  max: 1, // max 100 requests per IP
-  standardHeaders: true,  
+  max: 100, // max 100 requests per IP
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: 'Too many login attempts. Try again later.',
+});
+const loginlimiter = rateLimit({
+  store: new RedisStore({
+    sendCommand: (...args) => redisClient.call(...args),
+  }),
+  windowMs: 5 * 60 * 1000, // 15 minutes 300000 ms
+  max: 100, // max 100 requests per IP
+  standardHeaders: true,
   legacyHeaders: false,
   message: 'Too many login attempts. Try again later.',
 });
 
 app.use(limiter);
+app.use(loginlimiter);
 
 // --------------------
 // Routes
@@ -39,6 +50,39 @@ app.use(limiter);
 app.get('/', (req, res) => {
   res.send('Server running ✅');
 });
+
+
+
+
+
+
+
+app.get('/test', async (req, res) => {
+  try {
+    // 1. Increment counter (DO NOT set to 0)
+    const count = await redisClient.incr('test_counter');
+
+    // 2. Set expiry ONLY the first time
+    if (count === 1) {
+      await redisClient.expire('test_counter', 60); // 60 seconds
+    }
+
+    // 3. Block after limit
+    if (count > 10) {
+      return res.status(429).send('Limit reached. Try again later.');
+    }
+
+    res.send(`Test route accessed ${count} times`);
+  } catch (err) {
+    res.status(500).send('Error');
+  }
+});
+
+
+
+
+
+
 
 // Set posts in Redis
 app.get('/set', limiter, async (req, res) => {
