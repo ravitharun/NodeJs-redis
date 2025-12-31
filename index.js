@@ -4,10 +4,12 @@ import rateLimit from 'express-rate-limit';
 import RedisStore from 'rate-limit-redis';
 import Redis from 'ioredis';
 import fetch from 'node-fetch';
+import { createClient } from 'redis';
 
 const app = express();
 app.use(express.json());
-
+const pubClient = createClient();
+pubClient.connect();
 // --------------------
 // Redis Client (auto-connect)
 // --------------------
@@ -194,6 +196,41 @@ app.get('/getsetismember/:queryValue', async (req, res) => {
     res.status(500).send('Error checking set member');
   }
 });
+
+
+// pub means publish send the message
+app.get("/send", async (req, res) => {
+  try {
+    await pubClient.publish("events", "User logged in");
+    res.send("Message sent");
+
+  }
+  catch (error) {
+    console.error(error.message);
+    res.status(500).send('Error sending message');
+  }
+});
+// sub means subscribe receive the message
+app.get("/receive", async (req, res) => {
+  try {
+    const subClient = createClient();
+    await subClient.connect();
+    await subClient.subscribe("events", (message) => {
+      console.log("Received message:", message);
+      res.send(`Message received: ${message}`);
+    });
+  }
+  catch (error) {
+    console.error(error.message);
+    res.status(500).send('Error receiving message');
+  }
+});
+// webscoket (emi,on)==>emit means send the message [(on)---> means receive the message]
+// ------------------------------------------------------------
+// Pub/Sub with ioredis
+// --------------------------------------------------
+
+// emit and publish are same (send the message  to the server) and (on and subscribe) are same(receive the message from the server)
 
 // --------------------
 // Start server
