@@ -1,114 +1,157 @@
 // index.js
-import express, { json } from "express";
-import { createClient } from "redis";
+import express from 'express';
+import rateLimit from 'express-rate-limit';
+import RedisStore from 'rate-limit-redis';
+import Redis from 'ioredis';
+import fetch from 'node-fetch';
 
 const app = express();
 app.use(express.json());
 
-// Redis client
-const redisClient = createClient();
+// --------------------
+// Redis Client (auto-connect)
+// --------------------
+const redisClient = new Redis(); // ioredis auto connects
+redisClient.on('connect', () => console.log('Redis connected ✅'));
+redisClient.on('error', (err) => console.log('Redis Error:', err));
 
-redisClient.on("error", (err) => console.log("Redis Client Error", err));
+// --------------------
+// Rate Limiter
+// --------------------
+const limiter = rateLimit({
+  store: new RedisStore({
+    sendCommand: (...args) => redisClient.call(...args),
+  }),
+  windowMs: 5 * 60 * 1000, // 15 minutes 300000 ms
+  max: 1, // max 100 requests per IP
+  standardHeaders: true,  
+  legacyHeaders: false,
+  message: 'Too many login attempts. Try again later.',
+});
 
-await redisClient.connect();
+app.use(limiter);
 
+// --------------------
 // Routes
-app.get("/", async (req, res) => {
-  res.send("Server running ✅");
+// --------------------
+
+// Test server
+app.get('/', (req, res) => {
+  res.send('Server running ✅');
 });
 
-// Set a value
-app.get("/set", async (req, res) => {
-  const dataapi = await fetch('https://jsonplaceholder.typicode.com/posts');
-  const data = await dataapi.json()
-  await redisClient.set("posts", JSON.stringify(data), { EX: 3600 });
-  res.send(data);
-});
-// https://www.youtube.com/watch?v=Vx2zPMPvmug&t=4530s
-// Get a value
-app.get("/get", async (req, res) => {
-  const value = await redisClient.get("posts");
-  const parsedValue = JSON.parse(value);
-  res.send(parsedValue[1]);
-});
+// Set posts in Redis
+app.get('/set', limiter, async (req, res) => {
 
-// Update a value
-app.get("/updatename", async (req, res) => {
-  const NameUpdated = await redisClient.append("name", " Reddy");
-  // console.log(NameUpdated,'NameUpdated')
-  res.send("Value updated from Redis", NameUpdated);
-});
-
-app.get("/lpush", async (req, res) => {
   try {
-    const res1 = await redisClient.lPush('mylist', 'world');
-    console.log(res1); // 1    await redisClient.lpush("mylist", "value2");
-    // const res2 = await redisClient.lPush('mylist', 'world');
-    // console.log(res2); // 
-    res.send("Values pushed to Redis list", res1);
+    console.log(limiter, 'limiter')
+    const cachedData = await redisClient.get('posts');
+    if (cachedData) return res.send(JSON.parse(cachedData));
+
+    const dataApi = await fetch('https://jsonplaceholder.typicode.com/posts');
+    const data = await dataApi.json();
+
+    await redisClient.set('posts', JSON.stringify(data), 'EX', 3600);
+    res.send(data);
   } catch (error) {
-    console.log(error.message)
+    console.error(error.message);
+    res.status(500).send('Error fetching data');
   }
 });
 
-
-// Get list values
-app.get("/lrange", async (req, res) => {
+// Get posts
+app.get('/get', limiter, async (req, res) => {
   try {
-    const listValues = await redisClient.lRange("mylist", 0, -1);
-    console.log(listValues, 'listValues')
+
+    const value = await redisClient.get('posts');
+    if (!value) return res.send('No data found in Redis');
+    const parsedValue = JSON.parse(value);
+    res.send(parsedValue[1]);
+  } catch (error) {
+    console.error(error.message);
+    res.status(500).send('Error getting data');
+  }
+});
+
+// Append value
+app.get('/updatename', async (req, res) => {
+  try {
+    const nameUpdated = await redisClient.append('name', ' Reddy');
+    res.send(`Value updated in Redis: ${nameUpdated}`);
+  } catch (error) {
+    console.error(error.message);
+    res.status(500).send('Error updating value');
+  }
+});
+
+// LPUSH to list
+app.get('/lpush', async (req, res) => {
+  try {
+    const result = await redisClient.lPush('mylist', 'world');
+    res.send(`Values pushed to Redis list: ${result}`);
+  } catch (error) {
+    console.error(error.message);
+    res.status(500).send('Error pushing to list');
+  }
+});
+
+// LRANGE list
+app.get('/lrange', async (req, res) => {
+  try {
+    const listValues = await redisClient.lRange('mylist', 0, -1);
     res.send(`List values from Redis: ${listValues}`);
   } catch (error) {
-    console.log(error.message)
-  }
-}
-);
-
-app.get("/addset", (req, res) => {
-  try {
-    redisClient.sAdd('myset', 'value1');
-    redisClient.sAdd('myset', 'value2');
-    redisClient.sAdd('myset', 'value3');
-    res.send("Values added to Redis set");
-  } catch (error) {
-    console.log(error.message)
+    console.error(error.message);
+    res.status(500).send('Error reading list');
   }
 });
 
-app.get("/deleteset", async (req, res) => {
+// Add values to set
+app.get('/addset', async (req, res) => {
   try {
-    const deletedCount = await redisClient.del('myset');  
-    console.log(deletedCount,'deletedCount')
-   
+    await redisClient.sAdd('myset', 'value1', 'value2', 'value3');
+    res.send('Values added to Redis set');
+  } catch (error) {
+    console.error(error.message);
+    res.status(500).send('Error adding to set');
+  }
+});
+
+// Delete set
+app.get('/deleteset', async (req, res) => {
+  try {
+    const deletedCount = await redisClient.del('myset');
     res.send(`Deleted ${deletedCount} set(s) from Redis`);
   } catch (error) {
-    console.log(error.message)
+    console.error(error.message);
+    res.status(500).send('Error deleting set');
   }
 });
 
-app.get("/getset", async (req, res) => {
+// Get set members
+app.get('/getset', async (req, res) => {
   try {
-    const setValues = await redisClient.sMembers('myset');  
-    console.log(setValues,'setValues')
+    const setValues = await redisClient.sMembers('myset');
     res.send(`Set values from Redis: ${setValues}`);
   } catch (error) {
-    console.log(error.message)
+    console.error(error.message);
+    res.status(500).send('Error getting set values');
   }
 });
 
-app.get(`/getsetismember/:qrueryValue`, async (req, res) => {
+// Check if member exists in set
+app.get('/getsetismember/:queryValue', async (req, res) => {
   try {
-    const qrueryValue = req.params.qrueryValue;
-    console.log(qrueryValue,';qrueryValue')
-    const setValues = await redisClient.sIsMember('myset',qrueryValue);  
-     const setValuess = await redisClient.sMembers('myset');  
-    console.log(setValuess,'setValuess')
-    res.send(`Set values from Redis: ${setValues}`);
+    const queryValue = req.params.queryValue;
+    const isMember = await redisClient.sIsMember('myset', queryValue);
+    res.send(`Is "${queryValue}" in set? : ${isMember}`);
   } catch (error) {
-    console.log(error.message)
+    console.error(error.message);
+    res.status(500).send('Error checking set member');
   }
 });
 
+// --------------------
 // Start server
-app.listen(3000, () => console.log("Server running on port 3000"));
-export default app;
+// --------------------
+app.listen(3000, () => console.log('Server running on port 3000'));
