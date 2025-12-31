@@ -210,6 +210,11 @@ app.get("/send", async (req, res) => {
     res.status(500).send('Error sending message');
   }
 });
+
+
+
+
+
 // sub means subscribe receive the message
 app.get("/receive", async (req, res) => {
   try {
@@ -235,4 +240,8 @@ app.get("/receive", async (req, res) => {
 // --------------------
 // Start server
 // --------------------
+
+
+
+
 app.listen(3000, () => console.log('Server running on port 3000'));
