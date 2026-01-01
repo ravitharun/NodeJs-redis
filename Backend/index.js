@@ -30,6 +30,10 @@ const limiter = rateLimit({
   legacyHeaders: false,
   message: 'Too many login attempts. Try again later.',
 });
+
+
+
+
 const loginlimiter = rateLimit({
   store: new RedisStore({
     sendCommand: (...args) => redisClient.call(...args),
@@ -239,7 +243,7 @@ app.get("/receive", async (req, res) => {
 
 
 // redis transactions
-app.get('/transaction', async (req, res) => {
+app.get('/transaction',limiter, async (req, res) => {
   try {
     const multi = redisClient.multi();
     multi.set('key1', 'value1');
@@ -254,7 +258,7 @@ app.get('/transaction', async (req, res) => {
   }
 });
 
-app.get("/getkey1", async (req, res) => {
+app.get("/getkey1", limiter,async (req, res) => {
   try {
     const value = await redisClient
     
