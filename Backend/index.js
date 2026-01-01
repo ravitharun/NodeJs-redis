@@ -237,11 +237,39 @@ app.get("/receive", async (req, res) => {
 
 // emit and publish are same (send the message  to the server) and (on and subscribe) are same(receive the message from the server)
 
+
+// redis transactions
+app.get('/transaction', async (req, res) => {
+  try {
+    const multi = redisClient.multi();
+    multi.set('key1', 'value1');
+    multi.set('key2', 'value2');
+    multi.incr('counter');
+    const results = await multi.exec();
+    console.log(results, 'results')
+    res.send(`Transaction executed. Results: ${JSON.stringify(results)}`);
+  } catch (error) {
+    console.error(error.message);
+    res.status(500).send('Error executing transaction');
+  }
+});
+
+app.get("/getkey1", async (req, res) => {
+  try {
+    const value = await redisClient
+    
+      .get('key1');
+      console.log(value,"value")
+    res.send(`Value of key1: ${value}`);
+  } catch (error) {
+    console.error(error.message);
+    res.status(500).send('Error getting key1');
+  }
+
+});
+
 // --------------------
 // Start server
 // --------------------
-
-
-
 
 app.listen(3000, () => console.log('Server running on port 3000'));
